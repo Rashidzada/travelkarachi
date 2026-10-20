@@ -56,7 +56,7 @@ Because the compiled React frontend (`dist/`) is already included in the reposit
 ### Step 1: Clone the Repo in a PythonAnywhere Bash Console
 Open a **Bash console** on PythonAnywhere and run:
 ```bash
-git clone https://github.com/shafiqullah198-lang/travelkarachi.git
+git clone https://github.com/Rashidzada/travelkarachi.git
 cd travelkarachi
 mkvirtualenv --python=/usr/bin/python3.10 travelkarachi-venv
 bash deploy_pythonanywhere.sh
