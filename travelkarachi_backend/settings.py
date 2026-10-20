@@ -4,6 +4,7 @@ Configured for local development and PythonAnywhere / cloud deployment.
 """
 
 from pathlib import Path
+import importlib.util
 import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,8 +26,13 @@ CSRF_TRUSTED_ORIGINS = [
     'http://127.0.0.1:5173',
     'http://localhost:8000',
     'http://127.0.0.1:8000',
+    'https://travelkarachi.pythonanywhere.com',
     'https://*.pythonanywhere.com',
+    'https://*.vercel.app',
 ]
+
+HAS_CORSHEADERS = importlib.util.find_spec('corsheaders') is not None
+HAS_WHITENOISE = importlib.util.find_spec('whitenoise') is not None
 
 # Application definition
 INSTALLED_APPS = [
@@ -36,16 +42,17 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'corsheaders',
+    *(['corsheaders'] if HAS_CORSHEADERS else []),
     'rest_framework',
     'rest_framework.authtoken',
     'api',
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
+    'travelkarachi_backend.middleware.SimpleCorsMiddleware',
+    *(['corsheaders.middleware.CorsMiddleware'] if HAS_CORSHEADERS else []),
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    *(['whitenoise.middleware.WhiteNoiseMiddleware'] if HAS_WHITENOISE else []),
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -109,7 +116,8 @@ STATICFILES_DIRS = []
 if (FRONTEND_DIST_DIR / 'assets').exists():
     STATICFILES_DIRS.append(FRONTEND_DIST_DIR / 'assets')
 
-WHITENOISE_ROOT = FRONTEND_DIST_DIR if FRONTEND_DIST_DIR.exists() else None
+if HAS_WHITENOISE:
+    WHITENOISE_ROOT = FRONTEND_DIST_DIR if FRONTEND_DIST_DIR.exists() else None
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
