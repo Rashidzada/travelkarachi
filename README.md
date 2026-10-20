@@ -2,7 +2,13 @@
 
 A complete enterprise **B2B Airline & Travel Agency Management System** featuring the **AeroDesk** React + Tailwind CSS frontend powered by a real **Python Django REST Framework** backend (`travelkarachi_backend` & `api`).
 
-Pre-built (`dist/` included) and pre-configured for **1-minute deployment on PythonAnywhere**, Render, Railway, or any WSGI hosting platform.
+## 🌐 Live Production Deployments
+
+- **▲ Vercel Live Frontend:** [https://travelkarachi-flame.vercel.app/](https://travelkarachi-flame.vercel.app/)
+- **🐍 PythonAnywhere Live Full-Stack & Backend:** [https://travelkarachi.pythonanywhere.com/](https://travelkarachi.pythonanywhere.com/)
+- **📊 PythonAnywhere Live REST API:** [https://travelkarachi.pythonanywhere.com/api/dashboard/](https://travelkarachi.pythonanywhere.com/api/dashboard/)
+- **🛠️ PythonAnywhere Django Admin:** [https://travelkarachi.pythonanywhere.com/admin/](https://travelkarachi.pythonanywhere.com/admin/)
+- **📦 GitHub Repository:** [https://github.com/Rashidzada/travelkarachi](https://github.com/Rashidzada/travelkarachi)
 
 ---
 
