@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   TrendingUp, TrendingDown, DollarSign, Clock, CheckCircle,
   Users, UserPlus, Ticket, ArrowRight, PlusCircle, FileText,
@@ -8,8 +8,9 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar,
 } from "recharts";
+import { api } from "../../api";
 
-const chartData = [
+const initialChartData = [
   { month: "Jan", bookings: 340, revenue: 68 },
   { month: "Feb", bookings: 420, revenue: 84 },
   { month: "Mar", bookings: 380, revenue: 76 },
@@ -24,7 +25,7 @@ const chartData = [
   { month: "Dec", bookings: 940, revenue: 188 },
 ];
 
-const recentApprovals = [
+const initialRecentApprovals = [
   { id: 1, name: "Sara Malik",    ref: "BK-20241", route: "KHI → DXB", status: "Approved",  time: "2m ago",  initials: "SM", color: "#4F46E5" },
   { id: 2, name: "James Okafor", ref: "BK-20240", route: "LHR → JFK", status: "Pending",   time: "8m ago",  initials: "JO", color: "#06B6D4" },
   { id: 3, name: "Ayesha Khan",  ref: "BK-20239", route: "ISB → RUH", status: "Approved",  time: "15m ago", initials: "AK", color: "#22C55E" },
@@ -33,7 +34,7 @@ const recentApprovals = [
   { id: 6, name: "Priya Sharma", ref: "BK-20236", route: "BOM → LHR", status: "Approved",  time: "45m ago", initials: "PS", color: "#EF4444" },
 ];
 
-const topAgents = [
+const initialTopAgents = [
   { name: "Falcon Travels",  city: "Karachi",   bookings: 284, revenue: "$142,800", growth: 18,  status: "Active"    },
   { name: "Sky Bridge Intl", city: "Lahore",    bookings: 231, revenue: "$118,350", growth: 12,  status: "Active"    },
   { name: "Horizon Agency",  city: "Dubai",     bookings: 198, revenue: "$99,000",  growth: 9,   status: "Active"    },
@@ -48,17 +49,20 @@ const statusPill: Record<string, string> = {
   Pending:   "bg-[#FFFBEB] text-[#B45309] border border-[#FCD34D]",
   Rejected:  "bg-[#FEF2F2] text-[#B91C1C] border border-[#FCA5A5]",
   Issued:    "bg-[#EEF2FF] text-[#4338CA] border border-[#A5B4FC]",
+  Void:      "bg-[#F8FAFC] text-[#64748B] border border-[#CBD5E1]",
   Active:    "bg-[#F0FDF4] text-[#15803D] border border-[#86EFAC]",
   Suspended: "bg-[#FFFBEB] text-[#B45309] border border-[#FCD34D]",
+  Blocked:   "bg-[#FEF2F2] text-[#B91C1C] border border-[#FCA5A5]",
+  "Pending KYC": "bg-[#F8FAFC] text-[#64748B] border border-[#CBD5E1]",
 };
 
-const kpis = [
-  { label: "Total Bookings",    value: "4,821",  sub: "+12.4% vs last month", up: true,  icon: <Ticket size={17} />,     grad: "linear-gradient(135deg,#4F46E5,#7C3AED)", glow: "rgba(79,70,229,0.25)"   },
-  { label: "Sales Revenue",     value: "$1.24M", sub: "+8.7% vs last month",  up: true,  icon: <DollarSign size={17} />, grad: "linear-gradient(135deg,#22C55E,#16A34A)", glow: "rgba(34,197,94,0.25)"   },
-  { label: "Pending Approvals", value: "138",    sub: "–3.2% vs last month",  up: false, icon: <Clock size={17} />,      grad: "linear-gradient(135deg,#F59E0B,#D97706)", glow: "rgba(245,158,11,0.25)"  },
-  { label: "Approved Bookings", value: "3,902",  sub: "+15.1% vs last month", up: true,  icon: <CheckCircle size={17} />,grad: "linear-gradient(135deg,#06B6D4,#0284C7)", glow: "rgba(6,182,212,0.25)"   },
-  { label: "Sub Agents",        value: "127",    sub: "+4.3% vs last month",  up: true,  icon: <Users size={17} />,      grad: "linear-gradient(135deg,#7C3AED,#6D28D9)", glow: "rgba(124,58,237,0.25)"  },
-  { label: "New Registrations", value: "23",     sub: "+18.9% vs last month", up: true,  icon: <UserPlus size={17} />,   grad: "linear-gradient(135deg,#EF4444,#DC2626)", glow: "rgba(239,68,68,0.25)"   },
+const kpiMeta = [
+  { label: "Total Bookings",    defaultVal: "4,821",  sub: "+12.4% vs last month", trend: "+12.4%", up: true,  icon: <Ticket size={17} />,     grad: "linear-gradient(135deg,#4F46E5,#7C3AED)", glow: "rgba(79,70,229,0.25)"   },
+  { label: "Sales Revenue",     defaultVal: "$1.24M", sub: "+8.7% vs last month",  trend: "+8.7%",  up: true,  icon: <DollarSign size={17} />, grad: "linear-gradient(135deg,#22C55E,#16A34A)", glow: "rgba(34,197,94,0.25)"   },
+  { label: "Pending Approvals", defaultVal: "138",    sub: "–3.2% vs last month",  trend: "-3.2%",  up: false, icon: <Clock size={17} />,      grad: "linear-gradient(135deg,#F59E0B,#D97706)", glow: "rgba(245,158,11,0.25)"  },
+  { label: "Approved Bookings", defaultVal: "3,902",  sub: "+15.1% vs last month", trend: "+15.1%", up: true,  icon: <CheckCircle size={17} />,grad: "linear-gradient(135deg,#06B6D4,#0284C7)", glow: "rgba(6,182,212,0.25)"   },
+  { label: "Sub Agents",        defaultVal: "127",    sub: "+4.3% vs last month",  trend: "+4.3%",  up: true,  icon: <Users size={17} />,      grad: "linear-gradient(135deg,#7C3AED,#6D28D9)", glow: "rgba(124,58,237,0.25)"  },
+  { label: "New Registrations", defaultVal: "23",     sub: "+18.9% vs last month", trend: "+18.9%", up: true,  icon: <UserPlus size={17} />,   grad: "linear-gradient(135deg,#EF4444,#DC2626)", glow: "rgba(239,68,68,0.25)"   },
 ];
 
 const periods = ["7D", "30D", "90D", "1Y"];
@@ -75,10 +79,56 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-export function Dashboard() {
+interface DashboardProps {
+  onNavigate?: (screen: string) => void;
+}
+
+export function Dashboard({ onNavigate }: DashboardProps) {
   const [period, setPeriod] = useState("1Y");
   const [chartType, setChartType] = useState<"bookings" | "revenue">("bookings");
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
+
+  const [chartData, setChartData] = useState(initialChartData);
+  const [recentApprovals, setRecentApprovals] = useState(initialRecentApprovals);
+  const [topAgents, setTopAgents] = useState(initialTopAgents);
+  const [kpiValues, setKpiValues] = useState<Record<string, { value: string; sub: string; trend?: string; up: boolean }>>({});
+  const [heroStats, setHeroStats] = useState({
+    active_bookings: "4,821",
+    awaiting_review: 138,
+    bookings_today: "84",
+    pending_review_today: "12",
+    revenue_today: "$42K",
+  });
+  const [liveStatus, setLiveStatus] = useState([
+    { label: "Flights today",  value: "48 departures",    dot: "#22C55E", bar: 82 },
+    { label: "Alerts",         value: "3 require action", dot: "#F59E0B", bar: 24 },
+    { label: "API response",   value: "42 ms avg",        dot: "#06B6D4", bar: 88 },
+    { label: "Queue depth",    value: "2 pending",        dot: "#7C3AED", bar: 35 },
+  ]);
+
+  useEffect(() => {
+    let active = true;
+    api.getDashboard(period)
+      .then((data) => {
+        if (!active) return;
+        if (data.chartData) setChartData(data.chartData);
+        if (data.recentApprovals) setRecentApprovals(data.recentApprovals);
+        if (data.topAgents) setTopAgents(data.topAgents);
+        if (data.hero) setHeroStats(data.hero);
+        if (data.liveStatus) setLiveStatus(data.liveStatus);
+        if (data.kpis) {
+          const map: Record<string, any> = {};
+          data.kpis.forEach((k: any) => {
+            map[k.label] = k;
+          });
+          setKpiValues(map);
+        }
+      })
+      .catch(() => {
+        // Keep initial data if offline
+      });
+    return () => { active = false; };
+  }, [period]);
 
   return (
     <div
@@ -103,22 +153,22 @@ export function Dashboard() {
               style={{ background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.3)" }}>
               <Activity size={11} /> Live Dashboard
             </span>
-            <span className="text-white/50 text-[12px]">Mon, 8 Jun 2026</span>
+            <span className="text-white/50 text-[12px]">Connected to Django Backend</span>
           </div>
           <h1 className="text-white text-xl md:text-2xl font-bold leading-tight tracking-tight">
             Good morning, Admin 👋
           </h1>
           <p className="text-white/55 text-[12px] md:text-[13px] mt-1">
-            4,821 bookings active · 138 awaiting review
+            {heroStats.active_bookings} bookings active · {heroStats.awaiting_review} awaiting review
           </p>
         </div>
 
         {/* Glass stat chips — horizontal scroll on mobile */}
         <div className="relative z-10 flex items-center gap-3 overflow-x-auto pb-1 md:pb-0 scrollbar-hide flex-shrink-0">
           {[
-            { icon: <Zap size={13} />,        label: "Bookings Today", value: "84"  },
-            { icon: <Clock size={13} />,       label: "Pending Review", value: "12"  },
-            { icon: <DollarSign size={13} />,  label: "Revenue Today",  value: "$42K"},
+            { icon: <Zap size={13} />,        label: "Bookings Today", value: heroStats.bookings_today  },
+            { icon: <Clock size={13} />,       label: "Pending Review", value: heroStats.pending_review_today  },
+            { icon: <DollarSign size={13} />,  label: "Revenue Today",  value: heroStats.revenue_today },
           ].map((s) => (
             <div key={s.label}
               className="flex flex-col items-center px-4 py-2.5 rounded-[14px] flex-shrink-0 min-w-[84px]"
@@ -135,26 +185,33 @@ export function Dashboard() {
 
       {/* ── KPI Cards — 2 col mobile, 3 col sm, 6 col lg ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4 mb-5">
-        {kpis.map((kpi) => (
-          <div key={kpi.label}
-            className={`${glass} rounded-[14px] md:rounded-[16px] p-4 group relative overflow-hidden cursor-default hover:-translate-y-1 hover:shadow-[0_12px_36px_rgba(15,23,42,0.11)] transition-all duration-200`}>
-            <div className="absolute -bottom-4 -right-4 w-20 h-20 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-              style={{ background: kpi.glow }} />
-            <div className="flex items-start justify-between mb-2.5 relative z-10">
-              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center text-white shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
-                style={{ background: kpi.grad }}>
-                {kpi.icon}
+        {kpiMeta.map((kpi) => {
+          const live = kpiValues[kpi.label];
+          const val = live ? live.value : kpi.defaultVal;
+          const sub = live ? live.sub : kpi.sub;
+          const up = live ? live.up : kpi.up;
+          const trend = live?.trend || kpi.trend;
+          return (
+            <div key={kpi.label}
+              className={`${glass} rounded-[14px] md:rounded-[16px] p-4 group relative overflow-hidden cursor-default hover:-translate-y-1 hover:shadow-[0_12px_36px_rgba(15,23,42,0.11)] transition-all duration-200`}>
+              <div className="absolute -bottom-4 -right-4 w-20 h-20 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                style={{ background: kpi.glow }} />
+              <div className="flex items-start justify-between mb-2.5 relative z-10">
+                <div className="w-9 h-9 rounded-[10px] flex items-center justify-center text-white shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
+                  style={{ background: kpi.grad }}>
+                  {kpi.icon}
+                </div>
+                <span className={`flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${up ? "bg-[#F0FDF4] text-[#16A34A]" : "bg-[#FEF2F2] text-[#DC2626]"}`}>
+                  {up ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
+                  {trend}
+                </span>
               </div>
-              <span className={`flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${kpi.up ? "bg-[#F0FDF4] text-[#16A34A]" : "bg-[#FEF2F2] text-[#DC2626]"}`}>
-                {kpi.up ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
-                {kpi.trend}
-              </span>
+              <p className="text-[18px] md:text-[21px] font-extrabold text-[#0F172A] leading-none mb-1 relative z-10">{val}</p>
+              <p className="text-[11px] md:text-[12px] font-medium text-[#475569] relative z-10 leading-snug">{kpi.label}</p>
+              <p className="text-[9px] md:text-[10px] text-[#94A3B8] mt-0.5 relative z-10 hidden sm:block">{sub}</p>
             </div>
-            <p className="text-[18px] md:text-[21px] font-extrabold text-[#0F172A] leading-none mb-1 relative z-10">{kpi.value}</p>
-            <p className="text-[11px] md:text-[12px] font-medium text-[#475569] relative z-10 leading-snug">{kpi.label}</p>
-            <p className="text-[9px] md:text-[10px] text-[#94A3B8] mt-0.5 relative z-10 hidden sm:block">{kpi.sub}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* ── Chart + Approvals ── */}
@@ -216,14 +273,20 @@ export function Dashboard() {
               <h2 className="text-[14px] font-bold text-[#0F172A]">Recent Approvals</h2>
               <p className="text-[11px] text-[#94A3B8]">Last 6 transactions</p>
             </div>
-            <button className="flex items-center gap-1 text-[11px] text-[#4F46E5] font-semibold px-2.5 py-1.5 rounded-lg hover:bg-[#EEF2FF] transition-colors">
+            <button
+              onClick={() => onNavigate && onNavigate("flight-bookings")}
+              className="flex items-center gap-1 text-[11px] text-[#4F46E5] font-semibold px-2.5 py-1.5 rounded-lg hover:bg-[#EEF2FF] transition-colors"
+            >
               All <ArrowRight size={11} />
             </button>
           </div>
           <div className="flex-1 space-y-0">
             {recentApprovals.map((item, i) => (
-              <div key={item.id}>
-                <div className="flex items-center gap-2.5 py-2.5 rounded-lg px-1 hover:bg-white/50 transition-colors cursor-pointer">
+              <div key={item.ref || item.id}>
+                <div
+                  onClick={() => onNavigate && onNavigate("flight-bookings")}
+                  className="flex items-center gap-2.5 py-2.5 rounded-lg px-1 hover:bg-white/50 transition-colors cursor-pointer"
+                >
                   <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 shadow-sm"
                     style={{ background: item.color }}>
                     {item.initials}
@@ -233,7 +296,7 @@ export function Dashboard() {
                     <p className="text-[10px] text-[#94A3B8] truncate">{item.ref} · {item.route}</p>
                   </div>
                   <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                    <span className={`inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusPill[item.status]}`}>
+                    <span className={`inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusPill[item.status] || statusPill.Pending}`}>
                       {item.status}
                     </span>
                     <p className="text-[10px] text-[#CBD5E1]">{item.time}</p>
@@ -259,7 +322,10 @@ export function Dashboard() {
               <h2 className="text-[14px] font-bold text-[#0F172A]">Top Sub-Agents</h2>
               <p className="text-[11px] text-[#94A3B8] mt-0.5">Ranked by bookings this month</p>
             </div>
-            <button className="flex items-center gap-1.5 text-[11px] font-semibold text-[#64748B] px-2.5 py-1.5 rounded-lg hover:bg-white/60 transition-colors border border-transparent hover:border-[#E2E8F0]">
+            <button
+              onClick={() => onNavigate && onNavigate("sub-agents")}
+              className="flex items-center gap-1.5 text-[11px] font-semibold text-[#64748B] px-2.5 py-1.5 rounded-lg hover:bg-white/60 transition-colors border border-transparent hover:border-[#E2E8F0]"
+            >
               <MoreHorizontal size={13} /> More
             </button>
           </div>
@@ -279,13 +345,14 @@ export function Dashboard() {
                   <tr key={agent.name}
                     onMouseEnter={() => setHoveredAgent(agent.name)}
                     onMouseLeave={() => setHoveredAgent(null)}
+                    onClick={() => onNavigate && onNavigate("sub-agents")}
                     className="transition-colors cursor-pointer"
                     style={{ borderTop: "1px solid rgba(226,232,240,0.5)", background: hoveredAgent === agent.name ? "rgba(238,242,255,0.45)" : i % 2 === 1 ? "rgba(250,250,252,0.4)" : "transparent" }}>
                     <td className="px-4 py-3.5"><span className="text-[12px] font-bold text-[#CBD5E1]">0{i+1}</span></td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 shadow-sm"
-                          style={{ background: agentColors[i] }}>
+                          style={{ background: agentColors[i % agentColors.length] }}>
                           {agent.name.slice(0,2).toUpperCase()}
                         </div>
                         <span className="text-[13px] font-semibold text-[#0F172A] whitespace-nowrap">{agent.name}</span>
@@ -301,7 +368,7 @@ export function Dashboard() {
                       </span>
                     </td>
                     <td className="px-4 py-3.5">
-                      <span className={`inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full ${statusPill[agent.status]}`}>
+                      <span className={`inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full ${statusPill[agent.status] || statusPill.Active}`}>
                         {agent.status}
                       </span>
                     </td>
@@ -320,12 +387,13 @@ export function Dashboard() {
             <h2 className="text-[14px] font-bold text-[#0F172A] mb-3">Quick Actions</h2>
             <div className="grid grid-cols-4 sm:grid-cols-4 lg:grid-cols-2 gap-2.5">
               {[
-                { icon: <PlusCircle size={19} />, label: "New Booking", grad: "linear-gradient(135deg,#4F46E5,#7C3AED)",  glow: "rgba(79,70,229,0.2)"   },
-                { icon: <UserPlus size={19} />,   label: "Add Agent",   grad: "linear-gradient(135deg,#7C3AED,#6D28D9)",  glow: "rgba(124,58,237,0.2)"  },
-                { icon: <FileText size={19} />,   label: "Reports",     grad: "linear-gradient(135deg,#06B6D4,#0284C7)",  glow: "rgba(6,182,212,0.2)"   },
-                { icon: <Settings size={19} />,   label: "Settings",    grad: "linear-gradient(135deg,#64748B,#475569)",  glow: "rgba(100,116,139,0.2)" },
+                { icon: <PlusCircle size={19} />, label: "New Booking", target: "flight-pos",  grad: "linear-gradient(135deg,#4F46E5,#7C3AED)",  glow: "rgba(79,70,229,0.2)"   },
+                { icon: <UserPlus size={19} />,   label: "Add Agent",   target: "sub-agents",  grad: "linear-gradient(135deg,#7C3AED,#6D28D9)",  glow: "rgba(124,58,237,0.2)"  },
+                { icon: <FileText size={19} />,   label: "Reports",     target: "reports",     grad: "linear-gradient(135deg,#06B6D4,#0284C7)",  glow: "rgba(6,182,212,0.2)"   },
+                { icon: <Settings size={19} />,   label: "Settings",    target: "settings",    grad: "linear-gradient(135deg,#64748B,#475569)",  glow: "rgba(100,116,139,0.2)" },
               ].map((action) => (
                 <button key={action.label}
+                  onClick={() => onNavigate && onNavigate(action.target)}
                   className="group flex flex-col items-center gap-2 p-3 md:p-3.5 rounded-[13px] transition-all duration-200 border border-transparent hover:-translate-y-0.5"
                   style={{ background: "rgba(255,255,255,0.55)" }}
                   onMouseEnter={(e) => {
@@ -359,12 +427,7 @@ export function Dashboard() {
               </span>
             </div>
             <div className="space-y-2.5">
-              {[
-                { label: "Flights today",  value: "48 departures",    dot: "#22C55E", bar: 82 },
-                { label: "Alerts",         value: "3 require action", dot: "#F59E0B", bar: 24 },
-                { label: "API response",   value: "124 ms avg",       dot: "#06B6D4", bar: 68 },
-                { label: "Queue depth",    value: "7 pending",        dot: "#7C3AED", bar: 35 },
-              ].map((s) => (
+              {liveStatus.map((s) => (
                 <div key={s.label}>
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1.5">

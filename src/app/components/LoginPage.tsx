@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Eye, EyeOff, Plane, ArrowRight, Lock, Mail, CheckCircle2 } from "lucide-react";
+import { api, AuthUser, setAuthSession } from "../api";
 
 interface LoginPageProps {
-  onLogin: () => void;
+  onLogin: (user?: AuthUser) => void;
 }
 
 const ORB_CONFIG = [
@@ -21,10 +22,10 @@ const STATS = [
 ];
 
 export function LoginPage({ onLogin }: LoginPageProps) {
-  const [email, setEmail]               = useState("");
-  const [password, setPassword]         = useState("");
+  const [email, setEmail]               = useState("admin@aerodesk.io");
+  const [password, setPassword]         = useState("adminpassword123");
   const [showPass, setShowPass]         = useState(false);
-  const [remember, setRemember]         = useState(false);
+  const [remember, setRemember]         = useState(true);
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState("");
   const [mounted, setMounted]           = useState(false);
@@ -35,7 +36,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     return () => clearTimeout(t);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!email || !password) {
@@ -43,7 +44,15 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       return;
     }
     setLoading(true);
-    setTimeout(() => { setLoading(false); onLogin(); }, 1400);
+    try {
+      const res = await api.login(email, password);
+      setAuthSession(res.token, res.user);
+      setLoading(false);
+      onLogin(res.user);
+    } catch (err: any) {
+      setLoading(false);
+      setError(err?.message || "Unable to sign in. Please check your credentials.");
+    }
   };
 
   return (
@@ -319,7 +328,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
           {/* Demo hint */}
           <p style={{ textAlign: "center", color: "#94A3B8", fontSize: 12, marginTop: 24 }}>
-            Demo: enter any email + password to continue
+            Connected to Django API · Default: admin@aerodesk.io / adminpassword123
           </p>
         </div>
       </div>

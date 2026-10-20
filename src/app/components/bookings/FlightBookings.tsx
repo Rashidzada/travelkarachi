@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Search, Download, Plus, Filter, Eye, CheckCircle, XCircle, Printer, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { api } from "../../api";
 
 const statusStyles: Record<string, string> = {
   Pending:  "bg-[#FFFBEB] text-[#B45309] border border-[#FCD34D]",
@@ -9,7 +10,7 @@ const statusStyles: Record<string, string> = {
   Void:     "bg-[#F8FAFC] text-[#64748B] border border-[#CBD5E1]",
 };
 
-const bookings = [
+const initialBookings = [
   { ref: "BK-20241", passenger: "Sara Malik",     route: "KHI → DXB", airline: "Emirates",        date: "Jun 12, 2026", cls: "Economy",  amount: "$380",    status: "Approved" },
   { ref: "BK-20240", passenger: "James Okafor",   route: "LHR → JFK", airline: "British Airways",  date: "Jun 13, 2026", cls: "Business", amount: "$2,840",  status: "Pending"  },
   { ref: "BK-20239", passenger: "Ayesha Khan",    route: "ISB → RUH", airline: "PIA",              date: "Jun 14, 2026", cls: "Economy",  amount: "$420",    status: "Issued"   },
@@ -24,17 +25,80 @@ const bookings = [
 
 const tabs = ["All", "Pending", "Approved", "Rejected", "Issued", "Void"];
 
-export function FlightBookings() {
+interface FlightBookingsProps {
+  onNewBooking?: () => void;
+}
+
+export function FlightBookings({ onNewBooking }: FlightBookingsProps) {
+  const [bookings, setBookings] = useState<any[]>(initialBookings);
   const [activeTab, setActiveTab] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [airlineFilter, setAirlineFilter] = useState("All Airlines");
+  const [dateFilter, setDateFilter] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [viewBooking, setViewBooking] = useState<any | null>(null);
 
-  const filtered = activeTab === "All" ? bookings : bookings.filter((b) => b.status === activeTab);
+  const fetchBookings = useCallback(() => {
+    api.getBookings({
+      status: activeTab,
+      airline: airlineFilter,
+      date: dateFilter,
+      search: searchQuery,
+    })
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setBookings(data);
+        }
+      })
+      .catch(() => {
+        // fallback to local filtering if offline
+      });
+  }, [activeTab, airlineFilter, dateFilter, searchQuery]);
+
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
+
+  const filtered = bookings.filter((b) => {
+    if (activeTab !== "All" && b.status !== activeTab) return false;
+    if (airlineFilter !== "All Airlines" && !b.airline.toLowerCase().includes(airlineFilter.toLowerCase())) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (![b.ref, b.passenger, b.route, b.airline].some((f) => String(f || "").toLowerCase().includes(q))) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const handleStatusChange = async (ref: string, newStatus: string) => {
+    // Optimistic UI update
+    setBookings((prev) => prev.map((b) => (b.ref === ref ? { ...b, status: newStatus } : b)));
+    if (viewBooking && viewBooking.ref === ref) {
+      setViewBooking((prev: any) => ({ ...prev, status: newStatus }));
+    }
+    try {
+      const updated = await api.updateBookingStatus(ref, newStatus);
+      setBookings((prev) => prev.map((b) => (b.ref === ref ? updated : b)));
+    } catch {
+      fetchBookings();
+    }
+  };
+
+  const handleExport = () => {
+    const url = api.getExportBookingsUrl({
+      status: activeTab,
+      airline: airlineFilter,
+      search: searchQuery,
+    });
+    window.open(url, "_blank");
+  };
 
   const toggleSelect = (ref: string) =>
     setSelected((prev) => prev.includes(ref) ? prev.filter((r) => r !== ref) : [...prev, ref]);
 
-  const allSelected = filtered.every((b) => selected.includes(b.ref));
+  const allSelected = filtered.length > 0 && filtered.every((b) => selected.includes(b.ref));
   const toggleAll = () => setSelected(allSelected ? [] : filtered.map((b) => b.ref));
 
   return (
@@ -43,15 +107,23 @@ export function FlightBookings() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2.5">
           <h1 className="text-xl md:text-2xl font-semibold text-[#0F172A]">Flight Bookings</h1>
-          <span className="bg-[#EEF2FF] text-[#4338CA] text-[11px] font-semibold px-2 py-0.5 rounded-full border border-[#A5B4FC]">4,821</span>
+          <span className="bg-[#EEF2FF] text-[#4338CA] text-[11px] font-semibold px-2 py-0.5 rounded-full border border-[#A5B4FC]">
+            {4811 + bookings.length}
+          </span>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 px-3 h-9 rounded-[10px] border border-[#E2E8F0] text-[12px] font-medium text-[#0F172A] bg-white hover:bg-[#F8FAFC] shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1.5 px-3 h-9 rounded-[10px] border border-[#E2E8F0] text-[12px] font-medium text-[#0F172A] bg-white hover:bg-[#F8FAFC] shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+          >
             <Download size={14} />
             <span className="hidden sm:inline">Export</span>
           </button>
-          <button className="flex items-center gap-1.5 px-3 md:px-4 h-9 rounded-[10px] text-[12px] md:text-[13px] font-semibold text-white hover:shadow-md transition-all"
-            style={{ background: "linear-gradient(135deg,#4F46E5,#7C3AED)" }}>
+          <button
+            onClick={() => onNewBooking && onNewBooking()}
+            className="flex items-center gap-1.5 px-3 md:px-4 h-9 rounded-[10px] text-[12px] md:text-[13px] font-semibold text-white hover:shadow-md transition-all"
+            style={{ background: "linear-gradient(135deg,#4F46E5,#7C3AED)" }}
+          >
             <Plus size={14} />
             <span className="hidden sm:inline">New Booking</span>
             <span className="sm:hidden">New</span>
@@ -65,8 +137,13 @@ export function FlightBookings() {
         <div className="flex items-center gap-2 px-4 py-3">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
-            <input type="text" placeholder="Search bookings…"
-              className="w-full h-9 pl-8 pr-3 rounded-[8px] bg-[#F8FAFC] border border-[#E2E8F0] text-[13px] text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#4F46E5]" />
+            <input
+              type="text"
+              placeholder="Search bookings…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-9 pl-8 pr-3 rounded-[8px] bg-[#F8FAFC] border border-[#E2E8F0] text-[13px] text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#4F46E5]"
+            />
           </div>
           <button onClick={() => setFilterOpen(!filterOpen)}
             className={`flex items-center gap-1.5 h-9 px-3 rounded-[8px] border text-[12px] font-medium transition-colors ${filterOpen ? "bg-[#EEF2FF] border-[#4F46E5] text-[#4F46E5]" : "border-[#E2E8F0] text-[#64748B] bg-white hover:bg-[#F8FAFC]"}`}>
@@ -78,16 +155,34 @@ export function FlightBookings() {
         {/* Expandable filters */}
         {filterOpen && (
           <div className="px-4 pb-3 flex flex-col sm:flex-row gap-2 border-t border-[#F1F5F9]">
-            <select className="flex-1 h-9 px-3 rounded-[8px] border border-[#E2E8F0] text-[13px] text-[#64748B] bg-[#F8FAFC] focus:outline-none focus:border-[#4F46E5]">
+            <select
+              value={airlineFilter}
+              onChange={(e) => setAirlineFilter(e.target.value)}
+              className="flex-1 h-9 px-3 rounded-[8px] border border-[#E2E8F0] text-[13px] text-[#64748B] bg-[#F8FAFC] focus:outline-none focus:border-[#4F46E5]"
+            >
               <option>All Airlines</option>
               <option>Emirates</option>
               <option>PIA</option>
               <option>British Airways</option>
+              <option>Qatar Airways</option>
+              <option>Air France</option>
+              <option>Turkish Airlines</option>
             </select>
-            <input type="date"
-              className="flex-1 h-9 px-3 rounded-[8px] border border-[#E2E8F0] text-[13px] text-[#94A3B8] bg-[#F8FAFC] focus:outline-none focus:border-[#4F46E5]" />
-            <button onClick={() => setFilterOpen(false)}
-              className="h-9 px-3 rounded-[8px] bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B] flex items-center gap-1 text-[12px]">
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="flex-1 h-9 px-3 rounded-[8px] border border-[#E2E8F0] text-[13px] text-[#94A3B8] bg-[#F8FAFC] focus:outline-none focus:border-[#4F46E5]"
+            />
+            <button
+              onClick={() => {
+                setAirlineFilter("All Airlines");
+                setDateFilter("");
+                setSearchQuery("");
+                setFilterOpen(false);
+              }}
+              className="h-9 px-3 rounded-[8px] bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B] flex items-center gap-1 text-[12px]"
+            >
               <X size={12} /> Clear
             </button>
           </div>
@@ -144,24 +239,44 @@ export function FlightBookings() {
                   </td>
                   <td className="px-3 md:px-4 text-[12px] md:text-[13px] font-semibold text-[#0F172A] whitespace-nowrap">{booking.amount}</td>
                   <td className="px-3 md:px-4">
-                    <span className={`inline-flex text-[10px] md:text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${statusStyles[booking.status]}`}>
+                    <span className={`inline-flex text-[10px] md:text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${statusStyles[booking.status] || statusStyles.Pending}`}>
                       {booking.status}
                     </span>
                   </td>
                   <td className="px-3 md:px-4">
                     <div className="flex items-center gap-1">
-                      {[
-                        { icon: <Eye size={13} />,          bg: "#ECFEFF", color: "#06B6D4", title: "View"    },
-                        { icon: <CheckCircle size={13} />,  bg: "#F0FDF4", color: "#22C55E", title: "Approve" },
-                        { icon: <XCircle size={13} />,      bg: "#FEF2F2", color: "#EF4444", title: "Reject"  },
-                        { icon: <Printer size={13} />,      bg: "#F8FAFC", color: "#64748B", title: "Print"   },
-                      ].map((btn) => (
-                        <button key={btn.title} title={btn.title}
-                          className="w-7 h-7 md:w-8 md:h-8 rounded-[7px] flex items-center justify-center hover:scale-105 transition-all"
-                          style={{ background: btn.bg, color: btn.color }}>
-                          {btn.icon}
-                        </button>
-                      ))}
+                      <button
+                        title="View Details"
+                        onClick={() => setViewBooking(booking)}
+                        className="w-7 h-7 md:w-8 md:h-8 rounded-[7px] flex items-center justify-center hover:scale-105 transition-all"
+                        style={{ background: "#ECFEFF", color: "#06B6D4" }}
+                      >
+                        <Eye size={13} />
+                      </button>
+                      <button
+                        title="Approve Booking"
+                        onClick={() => handleStatusChange(booking.ref, "Approved")}
+                        className="w-7 h-7 md:w-8 md:h-8 rounded-[7px] flex items-center justify-center hover:scale-105 transition-all"
+                        style={{ background: "#F0FDF4", color: "#22C55E" }}
+                      >
+                        <CheckCircle size={13} />
+                      </button>
+                      <button
+                        title="Reject Booking"
+                        onClick={() => handleStatusChange(booking.ref, "Rejected")}
+                        className="w-7 h-7 md:w-8 md:h-8 rounded-[7px] flex items-center justify-center hover:scale-105 transition-all"
+                        style={{ background: "#FEF2F2", color: "#EF4444" }}
+                      >
+                        <XCircle size={13} />
+                      </button>
+                      <button
+                        title="Print Ticket"
+                        onClick={() => window.print()}
+                        className="w-7 h-7 md:w-8 md:h-8 rounded-[7px] flex items-center justify-center hover:scale-105 transition-all"
+                        style={{ background: "#F8FAFC", color: "#64748B" }}
+                      >
+                        <Printer size={13} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -174,7 +289,7 @@ export function FlightBookings() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 md:px-6 py-3 md:py-4 border-t border-[#E2E8F0] gap-3">
           <p className="text-[12px] md:text-[13px] text-[#94A3B8]">
             Showing <span className="font-medium text-[#0F172A]">1–{filtered.length}</span> of{" "}
-            <span className="font-medium text-[#0F172A]">4,821</span>
+            <span className="font-medium text-[#0F172A]">{4811 + bookings.length}</span>
           </p>
           <div className="flex items-center gap-1.5">
             <select className="h-8 px-2 rounded-[6px] border border-[#E2E8F0] text-[12px] text-[#64748B] bg-white focus:outline-none">
@@ -192,6 +307,76 @@ export function FlightBookings() {
           </div>
         </div>
       </div>
+
+      {/* Booking Details Modal */}
+      {viewBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4" onClick={() => setViewBooking(null)}>
+          <div
+            className="bg-white border border-[#E2E8F0] rounded-[18px] shadow-2xl w-full max-w-lg p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+              <div>
+                <span className="text-[11px] font-bold text-[#4F46E5] uppercase tracking-wider">{viewBooking.ref}</span>
+                <h3 className="text-[18px] font-bold text-[#0F172A]">{viewBooking.passenger}</h3>
+              </div>
+              <button onClick={() => setViewBooking(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-[#64748B] hover:bg-[#F8FAFC]">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-[13px]">
+              <div className="bg-[#F8FAFC] p-3 rounded-[10px]">
+                <p className="text-[11px] text-[#94A3B8]">Route & Airline</p>
+                <p className="font-semibold text-[#0F172A] mt-0.5">{viewBooking.route} · {viewBooking.airline}</p>
+              </div>
+              <div className="bg-[#F8FAFC] p-3 rounded-[10px]">
+                <p className="text-[11px] text-[#94A3B8]">Travel Date & Class</p>
+                <p className="font-semibold text-[#0F172A] mt-0.5">{viewBooking.date} · {viewBooking.cls}</p>
+              </div>
+              <div className="bg-[#F8FAFC] p-3 rounded-[10px]">
+                <p className="text-[11px] text-[#94A3B8]">Passport / Nationality</p>
+                <p className="font-semibold text-[#0F172A] mt-0.5">
+                  {viewBooking.passport_number || "AA982341"} ({viewBooking.nationality || "Pakistan"})
+                </p>
+              </div>
+              <div className="bg-[#F8FAFC] p-3 rounded-[10px]">
+                <p className="text-[11px] text-[#94A3B8]">Total Amount & Status</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="font-bold text-[#4F46E5]">{viewBooking.amount}</span>
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${statusStyles[viewBooking.status] || statusStyles.Pending}`}>
+                    {viewBooking.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[#E2E8F0]">
+              <div className="flex gap-1.5 flex-wrap">
+                {["Approved", "Issued", "Pending", "Rejected", "Void"].map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => handleStatusChange(viewBooking.ref, st)}
+                    className={`px-3 py-1.5 rounded-[8px] text-[12px] font-semibold border transition-all ${
+                      viewBooking.status === st
+                        ? "bg-[#4F46E5] text-white border-[#4F46E5]"
+                        : "bg-white text-[#64748B] border-[#E2E8F0] hover:border-[#4F46E5]"
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setViewBooking(null)}
+                className="px-4 py-1.5 rounded-[8px] bg-[#F1F5F9] text-[#0F172A] text-[12px] font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

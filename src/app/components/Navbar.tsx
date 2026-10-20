@@ -1,14 +1,18 @@
 import { useState } from "react";
-import { Bell, Search, ChevronDown, Globe, X, Menu } from "lucide-react";
+import { Bell, Search, ChevronDown, Globe, X, Menu, LogOut } from "lucide-react";
+import { AuthUser } from "../api";
 
 interface NavbarProps {
   breadcrumb: string;
   page: string;
   onMenuClick: () => void;
+  user?: AuthUser | null;
+  onLogout?: () => void;
 }
 
-export function Navbar({ breadcrumb, page, onMenuClick }: NavbarProps) {
+export function Navbar({ breadcrumb, page, onMenuClick, user, onLogout }: NavbarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <header className="h-14 md:h-16 bg-white border-b border-[#E2E8F0] flex items-center px-4 md:px-8 gap-3 flex-shrink-0 relative z-30">
@@ -90,19 +94,44 @@ export function Navbar({ breadcrumb, page, onMenuClick }: NavbarProps) {
         </button>
 
         {/* Avatar */}
-        <button className="flex items-center gap-2 pl-1 pr-2 md:pr-3 py-1 rounded-lg hover:bg-[#F8FAFC] transition-colors">
-          <div
-            className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
-            style={{ background: "linear-gradient(135deg,#4F46E5,#7C3AED)" }}
+        <div className="relative">
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="flex items-center gap-2 pl-1 pr-2 md:pr-3 py-1 rounded-lg hover:bg-[#F8FAFC] transition-colors"
           >
-            AM
-          </div>
-          <div className="text-left hidden md:block">
-            <p className="text-xs font-semibold text-[#0F172A]">Admin User</p>
-            <p className="text-[11px] text-[#94A3B8]">Super Admin</p>
-          </div>
-          <ChevronDown size={13} className="text-[#94A3B8] hidden md:block" />
-        </button>
+            <div
+              className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
+              style={{ background: "linear-gradient(135deg,#4F46E5,#7C3AED)" }}
+            >
+              {user?.initials || "AM"}
+            </div>
+            <div className="text-left hidden md:block">
+              <p className="text-xs font-semibold text-[#0F172A]">{user?.name || "Admin User"}</p>
+              <p className="text-[11px] text-[#94A3B8]">{user?.role || "Super Admin"}</p>
+            </div>
+            <ChevronDown size={13} className="text-[#94A3B8] hidden md:block" />
+          </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-white border border-[#E2E8F0] rounded-[12px] shadow-lg py-1.5 z-50">
+              <div className="px-3 py-2 border-b border-[#F1F5F9]">
+                <p className="text-[12px] font-semibold text-[#0F172A] truncate">{user?.name || "Admin User"}</p>
+                <p className="text-[11px] text-[#94A3B8] truncate">{user?.email || "admin@aerodesk.io"}</p>
+              </div>
+              {onLogout && (
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onLogout();
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[12px] font-medium text-[#EF4444] hover:bg-[#FEF2F2] transition-colors"
+                >
+                  <LogOut size={14} /> Sign out
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import {
   ArrowLeftRight, Calendar, Search, Plus, Minus, ChevronDown, Tag,
-  ArrowUpDown, Clock, Wifi, Coffee, Zap, Star, ChevronRight,
+  ArrowUpDown, Clock, Star, ChevronRight,
   Luggage, Plane, CheckCircle2, SlidersHorizontal, X,
 } from "lucide-react";
+import { api, SelectedFlightContext } from "../../api";
 
 const airportNames: Record<string, string> = {
   KHI: "Jinnah Intl · Karachi",
@@ -43,13 +44,13 @@ interface Flight {
   badge?: string;
 }
 
-const mkFlights = (from: string, to: string): Flight[] => [
-  { id:"1", airline:"Emirates",     code:"EK-623", logo:"EK", color:"#C8102E", dep:from,arr:to, depTime:"06:15",arrTime:"08:30", duration:"2h 15m", stops:0,           price:285,            seats:4,  amenities:["wifi","meal","usb","lounge"], cls:"Economy",  rating:4.8, badge:"Top Pick"  },
-  { id:"2", airline:"Air Arabia",   code:"G9-521", logo:"G9", color:"#FF6B35", dep:from,arr:to, depTime:"09:45",arrTime:"12:20", duration:"2h 35m", stops:0,           price:189,            seats:14, amenities:["usb"],                       cls:"Economy",  rating:4.1             },
-  { id:"3", airline:"PIA",          code:"PK-212", logo:"PK", color:"#006341", dep:from,arr:to, depTime:"11:00",arrTime:"14:45", duration:"3h 45m", stops:1,stopCity:"ISB", price:165,        seats:21, amenities:["meal"],                      cls:"Economy",  rating:3.6, badge:"Cheapest" },
+const mkFlights = (from: string, to: string, cls = "Economy"): Flight[] => [
+  { id:"1", airline:"Emirates",     code:"EK-623", logo:"EK", color:"#C8102E", dep:from,arr:to, depTime:"06:15",arrTime:"08:30", duration:"2h 15m", stops:0,           price:285,            seats:4,  amenities:["wifi","meal","usb","lounge"], cls, rating:4.8, badge:"Top Pick"  },
+  { id:"2", airline:"Air Arabia",   code:"G9-521", logo:"G9", color:"#FF6B35", dep:from,arr:to, depTime:"09:45",arrTime:"12:20", duration:"2h 35m", stops:0,           price:189,            seats:14, amenities:["usb"],                       cls, rating:4.1             },
+  { id:"3", airline:"PIA",          code:"PK-212", logo:"PK", color:"#006341", dep:from,arr:to, depTime:"11:00",arrTime:"14:45", duration:"3h 45m", stops:1,stopCity:"ISB", price:165,        seats:21, amenities:["meal"],                      cls, rating:3.6, badge:"Cheapest" },
   { id:"4", airline:"Qatar Airways",code:"QR-405", logo:"QR", color:"#5C0632", dep:from,arr:to, depTime:"13:20",arrTime:"15:50", duration:"2h 30m", stops:0,           price:340,oldPrice:420,seats:2,  amenities:["wifi","meal","usb","lounge"], cls:"Business", rating:4.9, badge:"Premium"  },
-  { id:"5", airline:"flydubai",     code:"FZ-312", logo:"FZ", color:"#00A3E0", dep:from,arr:to, depTime:"16:05",arrTime:"18:25", duration:"2h 20m", stops:0,           price:210,            seats:8,  amenities:["wifi","usb"],                cls:"Economy",  rating:4.3             },
-  { id:"6", airline:"Serene Air",   code:"ER-501", logo:"ER", color:"#1B3A6B", dep:from,arr:to, depTime:"19:30",arrTime:"22:05", duration:"2h 35m", stops:0,           price:155,            seats:26, amenities:["meal"],                      cls:"Economy",  rating:3.8             },
+  { id:"5", airline:"flydubai",     code:"FZ-312", logo:"FZ", color:"#00A3E0", dep:from,arr:to, depTime:"16:05",arrTime:"18:25", duration:"2h 20m", stops:0,           price:210,            seats:8,  amenities:["wifi","usb"],                cls, rating:4.3             },
+  { id:"6", airline:"Serene Air",   code:"ER-501", logo:"ER", color:"#1B3A6B", dep:from,arr:to, depTime:"19:30",arrTime:"22:05", duration:"2h 35m", stops:0,           price:155,            seats:26, amenities:["meal"],                      cls, rating:3.8             },
 ];
 
 type Sort = "price" | "duration" | "departure" | "rating";
@@ -61,29 +62,64 @@ const badgeColor: Record<string, { bg: string; text: string; border: string }> =
   Premium:    { bg: "#FFFBEB", text: "#B45309", border: "#FCD34D" },
 };
 
-export function FlightPOS({ onBookFlight }: { onBookFlight: () => void }) {
+export function FlightPOS({ onBookFlight }: { onBookFlight: (flight?: SelectedFlightContext) => void }) {
   const [tripType, setTripType]       = useState("Round Trip");
   const [from, setFrom]               = useState("KHI");
   const [to, setTo]                   = useState("DXB");
+  const [departDate, setDepartDate]   = useState("2026-06-15");
+  const [returnDate, setReturnDate]   = useState("2026-06-22");
   const [cabinClass, setCabinClass]   = useState("Economy");
   const [adults, setAdults]           = useState(1);
   const [children, setChildren]       = useState(0);
   const [infants, setInfants]         = useState(0);
   const [promoOpen, setPromoOpen]     = useState(false);
   const [promoCode, setPromoCode]     = useState("");
+  const [promoMessage, setPromoMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [promoDiscount, setPromoDiscount] = useState(0);
   const [results, setResults]         = useState<Flight[] | null>(null);
   const [searching, setSearching]     = useState(false);
   const [sortBy, setSortBy]           = useState<Sort>("price");
   const [stopFilter, setStopFilter]   = useState<StopFilter>("all");
-  const [maxPrice, setMaxPrice]       = useState(500);
+  const [maxPrice, setMaxPrice]       = useState(1200);
   const [showFilters, setShowFilters] = useState(false);
   const [selected, setSelected]       = useState<string | null>(null);
 
   const swap = () => { setFrom(to); setTo(from); };
 
-  const search = () => {
-    setSearching(true); setResults(null); setSelected(null);
-    setTimeout(() => { setResults(mkFlights(from, to)); setSearching(false); }, 1400);
+  const applyPromo = async () => {
+    if (!promoCode.trim()) return;
+    try {
+      const res = await api.validatePromo(promoCode.trim());
+      setPromoDiscount(res.discount_amount);
+      setPromoMessage({ text: `Applied ${res.code}: -$${res.discount_amount} (${res.description})`, ok: true });
+    } catch (err: any) {
+      setPromoDiscount(0);
+      setPromoMessage({ text: err?.message || "Invalid promo code (Try AERO20 or KARACHI50)", ok: false });
+    }
+  };
+
+  const search = async (overrideFrom?: string, overrideTo?: string) => {
+    const f = overrideFrom || from;
+    const t = overrideTo || to;
+    setSearching(true);
+    setResults(null);
+    setSelected(null);
+    try {
+      const data = await api.searchFlights({
+        from: f,
+        to: t,
+        cabin_class: cabinClass,
+        promo_code: promoCode,
+      });
+      if (data.promo_applied) {
+        setPromoDiscount(data.promo_applied);
+      }
+      setResults(data.flights);
+    } catch {
+      setResults(mkFlights(f, t, cabinClass));
+    } finally {
+      setSearching(false);
+    }
   };
 
   const displayed = results
@@ -169,7 +205,7 @@ export function FlightPOS({ onBookFlight }: { onBookFlight: () => void }) {
                 <Calendar size={16} className="text-[#94A3B8] flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] text-[#94A3B8]">Depart</p>
-                  <input type="date" defaultValue="2026-06-15"
+                  <input type="date" value={departDate} onChange={(e) => setDepartDate(e.target.value)}
                     className="text-[13px] font-semibold text-[#0F172A] focus:outline-none bg-transparent w-full" />
                 </div>
               </div>
@@ -177,7 +213,7 @@ export function FlightPOS({ onBookFlight }: { onBookFlight: () => void }) {
                 <Calendar size={16} className="text-[#94A3B8] flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] text-[#94A3B8]">Return</p>
-                  <input type="date" defaultValue="2026-06-22" disabled={tripType === "One Way"}
+                  <input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} disabled={tripType === "One Way"}
                     className="text-[13px] font-semibold text-[#0F172A] focus:outline-none bg-transparent w-full disabled:opacity-40" />
                 </div>
               </div>
@@ -211,22 +247,29 @@ export function FlightPOS({ onBookFlight }: { onBookFlight: () => void }) {
               <button onClick={() => setPromoOpen(!promoOpen)}
                 className="flex items-center gap-2 text-[13px] text-[#4F46E5] font-medium hover:underline">
                 <Tag size={13} />
-                Have a promo code?
+                Have a promo code? (Try AERO20 or KARACHI50)
                 <ChevronDown size={12} className={`transition-transform ${promoOpen ? "rotate-180" : ""}`} />
               </button>
               {promoOpen && (
-                <div className="mt-2 flex gap-2">
-                  <input type="text" placeholder="Enter promo code" value={promoCode} onChange={e => setPromoCode(e.target.value)}
-                    className="flex-1 h-9 px-4 rounded-[8px] border border-[#E2E8F0] text-[13px] focus:outline-none focus:border-[#4F46E5]" />
-                  <button className="px-4 h-9 rounded-[8px] bg-[#EEF2FF] text-[#4F46E5] text-[13px] font-semibold hover:bg-[#4F46E5] hover:text-white transition-colors">
-                    Apply
-                  </button>
+                <div className="mt-2">
+                  <div className="flex gap-2">
+                    <input type="text" placeholder="Enter promo code (e.g. AERO20)" value={promoCode} onChange={e => setPromoCode(e.target.value)}
+                      className="flex-1 h-9 px-4 rounded-[8px] border border-[#E2E8F0] text-[13px] focus:outline-none focus:border-[#4F46E5]" />
+                    <button onClick={applyPromo} className="px-4 h-9 rounded-[8px] bg-[#EEF2FF] text-[#4F46E5] text-[13px] font-semibold hover:bg-[#4F46E5] hover:text-white transition-colors">
+                      Apply
+                    </button>
+                  </div>
+                  {promoMessage && (
+                    <p className={`text-[11px] mt-1.5 font-medium ${promoMessage.ok ? "text-[#16A34A]" : "text-[#EF4444]"}`}>
+                      {promoMessage.text}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
 
             {/* Search button */}
-            <button onClick={search} disabled={searching} style={{
+            <button onClick={() => search()} disabled={searching} style={{
               width: "100%", height: 52, borderRadius: 10, border: "none", cursor: searching ? "not-allowed" : "pointer",
               background: searching ? "rgba(79,70,229,0.35)" : "linear-gradient(135deg,#4F46E5,#7C3AED)",
               color: "white", fontSize: 14, fontWeight: 700,
@@ -313,9 +356,9 @@ export function FlightPOS({ onBookFlight }: { onBookFlight: () => void }) {
                         <p className="text-[#94A3B8] text-[10px] font-bold uppercase tracking-wider mb-1.5">
                           Max Price: <span className="text-[#4F46E5] font-bold">${maxPrice}</span>
                         </p>
-                        <input type="range" min={100} max={500} step={10} value={maxPrice} onChange={e => setMaxPrice(Number(e.target.value))} className="w-full accent-[#4F46E5]" />
+                        <input type="range" min={100} max={1200} step={20} value={maxPrice} onChange={e => setMaxPrice(Number(e.target.value))} className="w-full accent-[#4F46E5]" />
                         <div className="flex justify-between text-[#CBD5E1] text-[10px] mt-1 font-medium">
-                          <span>$100</span><span>$500</span>
+                          <span>$100</span><span>$1200</span>
                         </div>
                       </div>
                     </div>
@@ -428,7 +471,24 @@ export function FlightPOS({ onBookFlight }: { onBookFlight: () => void }) {
                                   ${(flight.price * pax).toLocaleString()}
                                 </p>
                               </div>
-                              <button onClick={e => { e.stopPropagation(); onBookFlight(); }}
+                              <button onClick={e => {
+                                e.stopPropagation();
+                                onBookFlight({
+                                  airline: flight.airline,
+                                  code: flight.code,
+                                  dep: flight.dep,
+                                  arr: flight.arr,
+                                  depTime: flight.depTime,
+                                  arrTime: flight.arrTime,
+                                  duration: flight.duration,
+                                  stops: flight.stops,
+                                  price: flight.price,
+                                  cls: flight.cls || cabinClass,
+                                  pax,
+                                  date: departDate,
+                                  promoDiscount,
+                                });
+                              }}
                                 className="flex items-center gap-1 px-4 py-2 rounded-[8px] text-[12px] font-bold text-white shadow-sm hover:scale-[1.02] active:scale-95 transition-all"
                                 style={{ background: "linear-gradient(135deg,#4F46E5,#7C3AED)" }}>
                                 Book Now <ChevronRight size={13} />
@@ -447,7 +507,7 @@ export function FlightPOS({ onBookFlight }: { onBookFlight: () => void }) {
                       </div>
                       <p className="text-[#0F172A] text-[14px] font-bold mb-1">No flights match your filters</p>
                       <p className="text-[#94A3B8] text-[12px] mb-4">Try adjusting the price range or stops filter</p>
-                      <button onClick={() => { setStopFilter("all"); setMaxPrice(500); }}
+                      <button onClick={() => { setStopFilter("all"); setMaxPrice(1200); }}
                         className="text-[#4F46E5] text-[12px] font-bold hover:underline">
                         Clear all filters
                       </button>
@@ -464,8 +524,19 @@ export function FlightPOS({ onBookFlight }: { onBookFlight: () => void }) {
               <p className="text-[12px] text-[#94A3B8] font-medium mb-2 uppercase tracking-wider">Recent Searches</p>
               <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                 {recentSearches.map((s) => (
-                  <button key={s}
-                    className="flex-shrink-0 px-3 md:px-4 py-1.5 md:py-2 bg-white border border-[#E2E8F0] rounded-full text-[11px] md:text-[12px] text-[#64748B] hover:bg-[#EEF2FF] hover:border-[#4F46E5] hover:text-[#4F46E5] transition-all shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                  <button
+                    key={s}
+                    onClick={() => {
+                      const routePart = s.split("·")[0].trim();
+                      const [rFrom, rTo] = routePart.split("→").map((x) => x.trim());
+                      if (rFrom && rTo) {
+                        setFrom(rFrom);
+                        setTo(rTo);
+                        search(rFrom, rTo);
+                      }
+                    }}
+                    className="flex-shrink-0 px-3 md:px-4 py-1.5 md:py-2 bg-white border border-[#E2E8F0] rounded-full text-[11px] md:text-[12px] text-[#64748B] hover:bg-[#EEF2FF] hover:border-[#4F46E5] hover:text-[#4F46E5] transition-all shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                  >
                     {s}
                   </button>
                 ))}
