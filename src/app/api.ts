@@ -1,6 +1,16 @@
 // Central API client for AeroDesk Travel Karachi (Django Backend)
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || "/api";
+const getDefaultApiBase = () => {
+  if ((import.meta as any).env?.VITE_API_URL) {
+    return (import.meta as any).env.VITE_API_URL;
+  }
+  if (typeof window !== "undefined" && window.location.hostname.endsWith(".vercel.app")) {
+    return "https://travelkarachi.pythonanywhere.com/api";
+  }
+  return "/api";
+};
+
+const API_BASE = getDefaultApiBase();
 
 export interface AuthUser {
   id: number;

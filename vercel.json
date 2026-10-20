@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://travelkarachi.pythonanywhere.com/api/:path*"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "https://travelkarachi.pythonanywhere.com/admin/:path*"
+    },
+    {
+      "source": "/media/:path*",
+      "destination": "https://travelkarachi.pythonanywhere.com/media/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

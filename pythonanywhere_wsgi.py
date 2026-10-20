@@ -1,16 +1,12 @@
 """
-PythonAnywhere WSGI Configuration File Template for TravelKarachi (AeroDesk)
-----------------------------------------------------------------------------
-Copy and paste this into your PythonAnywhere Web tab -> WSGI configuration file
-(e.g. /var/www/yourusername_pythonanywhere_com_wsgi.py), replacing 'yourusername'
-with your actual PythonAnywhere username.
+PythonAnywhere WSGI Configuration File for TravelKarachi (AeroDesk)
+Account: travelkarachi (https://travelkarachi.pythonanywhere.com)
 """
 
 import os
 import sys
 
-# Replace 'yourusername' with your PythonAnywhere username:
-path = '/home/yourusername/travelkarachi'
+path = '/home/travelkarachi/travelkarachi'
 if path not in sys.path:
     sys.path.insert(0, path)
 
